@@ -199,6 +199,9 @@ check_disk_space() {
 # Main Triage Execution Flow
 # ------------------------------------------------------------------------------
 select_pid "$1"
+if [[ -z "$TARGET_PID" ]]; then
+    exit 0
+fi
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 WORK_DIR="${2:-/tmp}/jvm-triage-${TARGET_PID}-${TIMESTAMP}"
 mkdir -p "$WORK_DIR"
