@@ -55,6 +55,7 @@ CMD_JCMD=$(find_jdk_tool "jcmd")
 if [[ -z "$CMD_JSTAT" || -z "$CMD_JSTACK" ]]; then
     warn "JDK tools (jstat/jstack) not found in PATH or standard JAVA_HOME."
     warn "Some runtime telemetry may be limited. Ensure you run this with JDK or as the application user."
+    warn "(未在 PATH 或 JAVA_HOME 中找到 jstat/jstack 工具，建议以应用所属用户或在含 JDK 环境下执行)"
 fi
 
 # ------------------------------------------------------------------------------
@@ -69,7 +70,7 @@ select_pid() {
             TARGET_PID="$requested_pid"
             return 0
         else
-            error "Specified PID $requested_pid is not running or not accessible."
+            error "Specified PID $requested_pid is not running or not accessible. (指定 PID $requested_pid 不存在或无权限访问)"
             exit 1
         fi
     fi
@@ -101,16 +102,16 @@ select_pid() {
 
     local count=${#pids[@]}
     if [[ $count -eq 0 ]]; then
-        error "No active Java processes detected on this system."
+        error "No active Java processes detected on this system. (未检测到正在运行的 Java 进程)"
         exit 1
     elif [[ $count -eq 1 ]]; then
-        info "Automatically selected the only running Java process: PID ${pids[0]} (${descs[0]})"
+        info "Automatically selected the only running Java process: PID ${pids[0]} (${descs[0]}) [已自动选择唯一运行的 Java 进程]"
         TARGET_PID="${pids[0]}"
         return 0
     fi
 
     # Multiple Java processes found -> Render user selection menu
-    printf "\n${COLOR_BOLD}${COLOR_YELLOW}Detected multiple Java processes. Please select the target to inspect:${COLOR_RESET}\n"
+    printf "\n${COLOR_BOLD}${COLOR_YELLOW}Detected multiple Java processes. Please select the target to inspect (检测到多个 Java 进程，请选择目标序号):${COLOR_RESET}\n"
     printf "%s\n" "--------------------------------------------------------------------------------"
     for i in "${!pids[@]}"; do
         local idx=$((i + 1))
@@ -119,7 +120,7 @@ select_pid() {
     printf "%s\n" "--------------------------------------------------------------------------------"
 
     while true; do
-        local prompt="Enter selection [1-$count] (or 'q' to quit): "
+        local prompt="Enter selection [1-$count] (or 'q' to quit) [输入序号 1-$count，按 q 退出]: "
         local choice=""
         if [[ -r /dev/tty ]]; then
             read -r -p "$prompt" choice < /dev/tty
@@ -128,14 +129,14 @@ select_pid() {
         fi
 
         if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
-            info "Exited by user."
+            info "Exited by user. (用户取消退出)"
             exit 0
         fi
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= count )); then
             TARGET_PID="${pids[$((choice - 1))]}"
             return 0
         fi
-        printf "${COLOR_RED}Invalid input. Please enter a number between 1 and %d.${COLOR_RESET}\n" "$count"
+        printf "${COLOR_RED}Invalid input. Please enter a number between 1 and %d. (输入无效，请输入 1 到 %d 之间的数字)${COLOR_RESET}\n" "$count"
     done
 }
 
@@ -208,10 +209,11 @@ mkdir -p "$WORK_DIR"
 
 printf "\n${COLOR_BOLD}${COLOR_CYAN}================================================================================${COLOR_RESET}\n"
 printf "                ${COLOR_BOLD}JVM-TRIAGE: Incident Diagnosis & Scene Preservation${COLOR_RESET}\n"
+printf "                ${COLOR_DIM}[ 生产事故应急排障与快照归档工具 ]${COLOR_RESET}\n"
 printf "                Target PID: ${COLOR_GREEN}%s${COLOR_RESET} | Output Dir: ${COLOR_DIM}%s${COLOR_RESET}\n" "$TARGET_PID" "$WORK_DIR"
 printf "${COLOR_BOLD}${COLOR_CYAN}================================================================================${COLOR_RESET}\n\n"
 
-info "Step 1/4: Gathering system metrics, uptime, and disk headroom..."
+info "Step 1/4: Gathering system metrics, uptime, and disk headroom... (采集系统指标、运行时间与磁盘余量)"
 
 # 1. Host and Process uptime
 UPTIME_STR="Unknown"
@@ -232,7 +234,7 @@ DISK_FREE_MB=$(check_disk_space "$WORK_DIR")
 DISK_FREE_GB=$(awk "BEGIN {printf \"%.1f\", $DISK_FREE_MB / 1024}")
 
 # 2. Top CPU Threads Profile (Linux top -H)
-info "Step 2/4: Profiling Top CPU threads..."
+info "Step 2/4: Profiling Top CPU threads... (定位 CPU 占用 Top 线程及十六进制 nid)"
 TOP_THREADS_FILE="$WORK_DIR/top_threads.txt"
 TOP_PIDS=()
 TOP_NIDS=()
@@ -276,7 +278,7 @@ if command -v ps >/dev/null 2>&1; then
 fi
 
 # 3. GC Metrics (5 Samples at 1-second intervals)
-info "Step 3/4: Sampling JVM Memory & GC statistics (5 samples, 1s interval)..."
+info "Step 3/4: Sampling JVM Memory & GC statistics (5 samples, 1s interval)... (采样 JVM 内存与 GC 指标: 5次/1秒间隔)"
 GC_FILE="$WORK_DIR/jstat_gcutil.txt"
 DELTA_FGC=0
 DELTA_FGCT="0.0"
@@ -317,7 +319,7 @@ else
 fi
 
 # 4. 3-Snapshot Thread Dumps (2-second intervals)
-info "Step 4/4: Capturing 3 consecutive jstack snapshots (2s interval)..."
+info "Step 4/4: Capturing 3 consecutive jstack snapshots (2s interval)... (连抓 3 轮 jstack 线程栈快照: 间隔2秒)"
 DEADLOCK_FOUND=false
 DEADLOCK_DETAILS=""
 
@@ -408,34 +410,34 @@ IS_DUMP_RECOMMENDED=false
 
 # 1. Check Deadlock
 if [[ "$DEADLOCK_FOUND" == "true" ]]; then
-    DIAGNOSIS_CATEGORY="DEADLOCK_DETECTED"
-    DIAGNOSIS_SUMMARY="Direct Java-level Deadlock detected between threads competing for monitors/locks."
-    ACTION_RECOMMENDATION="DO NOT restart blindly. Review the deadlock stack printed below, locate synchronized/Lock acquisitions, and fix lock ordering."
+    DIAGNOSIS_CATEGORY="DEADLOCK_DETECTED (检测到死锁)"
+    DIAGNOSIS_SUMMARY="Direct Java-level Deadlock detected between threads competing for monitors/locks.\n                     (检测到明确的 Java 线程死锁，线程互相等待监视器锁/互斥锁。)"
+    ACTION_RECOMMENDATION="DO NOT restart blindly. Review the deadlock stack printed below, locate synchronized/Lock acquisitions, and fix lock ordering.\n                     (切勿盲目重启丢失现场！请查看报告中的死锁分析详情，定位双方争抢锁的代码行并调整加锁顺序。)"
 
 # 2. Check Memory Exhaustion / GC Thrashing
 elif [[ $GC_THREAD_CPU_COUNT -ge 2 || ($DELTA_FGC -gt 0 && $(echo "$LATEST_O > 85.0" | bc -l 2>/dev/null || echo 0) -eq 1) ]]; then
-    DIAGNOSIS_CATEGORY="GC_THRASHING_AND_MEMORY_LEAK"
-    DIAGNOSIS_SUMMARY="Severe GC Thrashing detected. High CPU usage is driven by JVM GC threads (Old Gen: ${LATEST_O}%, FGC Count Delta: +${DELTA_FGC} in 5s)."
+    DIAGNOSIS_CATEGORY="GC_THRASHING_AND_MEMORY_LEAK (老年代耗尽 / 频繁 Full GC)"
+    DIAGNOSIS_SUMMARY="Severe GC Thrashing detected. High CPU usage is driven by JVM GC threads (Old Gen: ${LATEST_O}%, FGC Count Delta: +${DELTA_FGC} in 5s).\n                     (Old区已严重耗尽，高 CPU 占用由 JVM GC 线程持续触发 Full GC 引起，属次生表象。)"
     IS_DUMP_RECOMMENDED=true
-    ACTION_RECOMMENDATION="Potential memory leak or insufficient heap. High CPU is a SYMPTOM, not the cause. Generating a heap dump is strongly recommended for MAT analysis."
+    ACTION_RECOMMENDATION="Potential memory leak or insufficient heap. High CPU is a SYMPTOM, not the cause. Generating a heap dump is strongly recommended for MAT analysis.\n                     (存在内存泄露或堆内存不足。高 CPU 只是表象，根因在堆内存，强烈建议保留 Heap Dump 并使用 MAT 深入分析。)"
 
 # 3. Check High CPU Business Thread Spin
 elif [[ $(echo "$TOTAL_CPU_PCT > 70.0" | bc -l 2>/dev/null || echo 0) -eq 1 && $BUSINESS_THREAD_CPU_COUNT -ge 1 && $DELTA_FGC -eq 0 ]]; then
-    DIAGNOSIS_CATEGORY="CPU_SPIN_IN_APPLICATION_CODE"
-    DIAGNOSIS_SUMMARY="CPU spike is caused by application worker threads (e.g., infinite loop, unindexed data scan, heavy regex/crypto). Old Gen and GC metrics are normal."
+    DIAGNOSIS_CATEGORY="CPU_SPIN_IN_APPLICATION_CODE (业务代码死循环 / 高计算消耗)"
+    DIAGNOSIS_SUMMARY="CPU spike is caused by application worker threads (e.g., infinite loop, unindexed data scan, heavy regex/crypto). Old Gen and GC metrics are normal.\n                     (CPU 飙高由业务工作线程引起，如无限循环、大集合深度扫描、灾难性正则回溯等；Old 区及 GC 指标正常。)"
     IS_DUMP_RECOMMENDED=false
-    ACTION_RECOMMENDATION="DO NOT DUMP HEAP (waste of time/disk). Directly examine the hot code stack trace below to find the exact class and line number."
+    ACTION_RECOMMENDATION="DO NOT DUMP HEAP (waste of time/disk). Directly examine the hot code stack trace below to find the exact class and line number.\n                     (切勿 Dump 堆内存！不仅浪费时间、磁盘还会引发 STW。请直接根据下方热点线程 nid 堆栈定位具体业务类和代码行。)"
 
 # 4. Check Thread Starvation / Blocked Pool
 elif [[ $BLOCKED_COUNT -gt 20 || ($WAITING_COUNT -gt 200 && $(echo "$TOTAL_CPU_PCT < 30.0" | bc -l 2>/dev/null || echo 0) -eq 1) ]]; then
-    DIAGNOSIS_CATEGORY="THREAD_STARVATION_OR_RESOURCE_BOTTLENECK"
-    DIAGNOSIS_SUMMARY="Low CPU usage but massive BLOCKED/WAITING threads ($BLOCKED_COUNT blocked, $WAITING_COUNT waiting). Likely waiting on slow DB queries, connection pool exhaustion, or external downstream timeouts."
-    ACTION_RECOMMENDATION="Check downstream dependencies (MySQL/Redis/Dubbo response times) and connection pool limits. Check threads waiting on locks in jstack."
+    DIAGNOSIS_CATEGORY="THREAD_STARVATION_OR_RESOURCE_BOTTLENECK (线程阻塞 / 下游资源瓶颈)"
+    DIAGNOSIS_SUMMARY="Low CPU usage but massive BLOCKED/WAITING threads ($BLOCKED_COUNT blocked, $WAITING_COUNT waiting). Likely waiting on slow DB queries, connection pool exhaustion, or external downstream timeouts.\n                     (CPU 占用不高但大量线程处于 BLOCKED/WAITING 状态，通常是数据库连接池耗尽、慢查询或下游 RPC 调用无超时导致堆积。)"
+    ACTION_RECOMMENDATION="Check downstream dependencies (MySQL/Redis/Dubbo response times) and connection pool limits. Check threads waiting on locks in jstack.\n                     (排查下游依赖 MySQL/Redis/RPC 的响应时延及连接池配额，并对照下方 jstack 检查正等待锁的堆栈。)"
 
 else
-    DIAGNOSIS_CATEGORY="GENERAL_OR_TRANSIENT_ANOMALY"
-    DIAGNOSIS_SUMMARY="No persistent Full GC loops or deadlocks observed during the 5-sample window. May be transient traffic spike or slow I/O."
-    ACTION_RECOMMENDATION="Review the 3 captured jstack files in $WORK_DIR to compare thread progression."
+    DIAGNOSIS_CATEGORY="GENERAL_OR_TRANSIENT_ANOMALY (常规波动 / 瞬时突发异常)"
+    DIAGNOSIS_SUMMARY="No persistent Full GC loops or deadlocks observed during the 5-sample window. May be transient traffic spike or slow I/O.\n                     (采样窗口内未见持续 Full GC 或死锁，可能为瞬时流量尖峰或下游慢 I/O。)"
+    ACTION_RECOMMENDATION="Review the 3 captured jstack files in $WORK_DIR to compare thread progression.\n                     (建议查看归档目录中的 3 份 jstack 快照，比对线程状态演进推进情况。)"
 fi
 
 # ------------------------------------------------------------------------------
@@ -447,21 +449,21 @@ REPORT_FILE="$WORK_DIR/diagnostic_report.txt"
 printf "================================================================================\n"
 printf "                       JVM-TRIAGE INCIDENT REPORT\n"
 printf "================================================================================\n"
-printf "[1] System & Runtime Baseline\n"
+printf "[1] System & Runtime Baseline (系统基线与资源限制)\n"
 printf "  - Target Process : PID %s (Uptime: %s)\n" "$TARGET_PID" "$UPTIME_STR"
 printf "  - System LoadAvg : %s\n" "$LOAD_AVG"
 printf "  - CGroup Limits  : CPU: %s | Memory: %s\n" "$CGROUP_CPU" "$CGROUP_MEM"
 printf "  - Disk Headroom  : %s GB available on %s\n" "$DISK_FREE_GB" "$WORK_DIR"
 printf "\n"
-printf "[2] Telemetry & Vital Signs\n"
+printf "[2] Telemetry & Vital Signs (核心指标与体征)\n"
 printf "  - Overall CPU    : %s%%\n" "$TOTAL_CPU_PCT"
 printf "  - Memory Usage   : Eden: %s%% | Old: %s%% | Metaspace: %s%%\n" "$LATEST_E" "$LATEST_O" "$LATEST_M"
 printf "  - GC 5s Activity : YGC: %s | FGC Delta: +%d (FGCT Delta: +%ss)\n" "$LATEST_YGC" "$DELTA_FGC" "$DELTA_FGCT"
 printf "  - Thread States  : Total: %d | RUNNABLE: %d | BLOCKED: %d | WAITING: %d\n" "$TOTAL_THREADS" "$RUNNABLE_COUNT" "$BLOCKED_COUNT" "$WAITING_COUNT"
 printf "\n"
-printf "[3] Top CPU Threads & Hotspot Stack Traces\n"
+printf "[3] Top CPU Threads & Hotspot Stack Traces (CPU 热点线程与栈顶定位)\n"
 if [[ ${#HOTSPOT_THREAD_REPORTS[@]} -eq 0 ]]; then
-    printf "  (No individual thread CPU breakdown available on this OS/platform)\n"
+    printf "  (No individual thread CPU breakdown available on this OS/platform - 当前系统不支持单线程 CPU 细分)\n"
 else
     for report in "${HOTSPOT_THREAD_REPORTS[@]}"; do
         printf "  %b\n" "$report"
@@ -469,30 +471,33 @@ else
 fi
 printf "\n"
 if [[ "$DEADLOCK_FOUND" == "true" ]]; then
-    printf "[!] CRITICAL: Deadlock Analysis\n"
+    printf "[!] CRITICAL: Deadlock Analysis (严重告警: 检测到 Java 死锁)\n"
     printf "%s\n\n" "$DEADLOCK_DETAILS"
 fi
-printf "[4] Root Cause Diagnosis & Decision Matrix\n"
-printf "  >>> Category     : %s\n" "$DIAGNOSIS_CATEGORY"
-printf "  >>> Summary      : %s\n" "$DIAGNOSIS_SUMMARY"
-printf "  >>> Next Actions : %s\n" "$ACTION_RECOMMENDATION"
+printf "[4] Root Cause Diagnosis & Decision Matrix (根因研判与处置决策)\n"
+printf "  >>> Category     : %b\n" "$DIAGNOSIS_CATEGORY"
+printf "  >>> Summary      : %b\n" "$DIAGNOSIS_SUMMARY"
+printf "  >>> Next Actions : %b\n" "$ACTION_RECOMMENDATION"
 printf "\n"
-printf "[5] Safe Operation Guide\n"
+printf "[5] Safe Operation Guide (安全操作指南)\n"
 if [[ "$IS_DUMP_RECOMMENDED" == "true" ]]; then
     if [[ $DISK_FREE_MB -lt 4096 ]]; then
         printf "  ${COLOR_RED}[DANGER] Available disk is under 4GB (%s GB). DUMPING HEAP MAY CRASH NODE!${COLOR_RESET}\n" "$DISK_FREE_GB"
-        printf "  Clean up disk space before triggering heap dump.\n"
+        printf "  ${COLOR_RED}[!] 磁盘剩余空间不足 4GB，执行 Dump 极可能打满磁盘导致宿主机/节点崩溃！请先清理磁盘空间。${COLOR_RESET}\n"
     else
         printf "  [+] Heap dump recommended. Disk headroom is safe (%s GB available).\n" "$DISK_FREE_GB"
+        printf "      (建议保留 Heap Dump，磁盘空间安全充足。)\n"
         printf "  [+] Recommended Non-Intrusive Dump Command:\n"
         printf "      %s %s GC.heap_dump %s/heap_dump_%s.hprof\n" "${CMD_JCMD:-jcmd}" "$TARGET_PID" "$WORK_DIR" "$TARGET_PID"
         printf "      (Note: Brief STW pause may occur. If in K8s, drain/isolate pod traffic first if possible)\n"
+        printf "      (注意: 执行 Dump 会导致短暂 STW 停顿；若在 K8s 环境，建议先将 Pod 从 Endpoint 隔离摘流)\n"
     fi
 else
     printf "  [-] Heap dump NOT necessary for this scenario. Save disk I/O and avoid unnecessary STW pause.\n"
+    printf "      (当前场景【无需 Dump 堆内存】，节省磁盘 I/O 并避免无意义的 STW 业务停顿。)\n"
 fi
 printf "\n"
-printf "[6] Archive & Evidence Preservation\n"
+printf "[6] Archive & Evidence Preservation (现场快照与归档)\n"
 printf "  Raw snapshots saved to: %s\n" "$WORK_DIR"
 printf "================================================================================\n"
 } | tee "$REPORT_FILE"
@@ -503,5 +508,5 @@ printf "========================================================================
 TARBALL_PATH="${WORK_DIR}.tar.gz"
 tar -czf "$TARBALL_PATH" -C "$(dirname "$WORK_DIR")" "$(basename "$WORK_DIR")" 2>/dev/null || true
 
-printf "\n${COLOR_GREEN}✓ Scene preserved successfully!${COLOR_RESET}\n"
+printf "\n${COLOR_GREEN}✓ Scene preserved successfully! (现场快照已打包归档)${COLOR_RESET}\n"
 printf "Diagnostic bundle created: ${COLOR_BOLD}%s${COLOR_RESET}\n\n" "$TARBALL_PATH"

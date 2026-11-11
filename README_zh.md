@@ -1,6 +1,6 @@
 # jvm-triage
 
-轻量级 Java 线上排障与现场保全工具。单 Shell 脚本、零依赖，3~5 秒内完成 CPU/GC/线程栈采样，输出客观研判报告，避免盲目重启丢失现场或误操作 Dump 导致次生灾害。
+轻量级 Java 线上应急排障与快照归档工具。单 Shell 脚本、零依赖，3~5 秒内完成 CPU/GC/线程栈采样，输出客观研判报告，避免盲目重启丢失现场或误操作 Dump 导致次生灾害。
 
 [English](./README.md) | 简体中文
 
@@ -39,18 +39,45 @@ git clone https://github.com/b1n9bna/jvm-triage.git
 ================================================================================
                        JVM-TRIAGE INCIDENT REPORT
 ================================================================================
-[1] 基线环境: PID 18422 | LoadAvg: 7.82 | 磁盘剩余: 32 GB (充足)
-[2] 核心体征: CPU 385% | Old区: 99.8% | 5秒内发生 3 次 Full GC (耗时 2.18s)
-[3] CPU Top 线程:
-  - nid: 0x47fe | CPU: 96.2% | "VM Thread"
-  - nid: 0x47ff | CPU: 95.1% | "GC Task Thread#0"
-[4] 研判结论与处置建议:
-  >>> 根因分析: Old 区已满，GC 线程占满 CPU 正在频繁触发 Full GC！
-  >>> 下一步动作:
-      [+] 磁盘安全，建议生成 Heap Dump 进行 MAT 分析:
-          jcmd 18422 GC.heap_dump /tmp/dump_18422.hprof
+[1] System & Runtime Baseline (系统基线与资源限制)
+  - Target Process : PID 18422 (Uptime: 04:12)
+  - System LoadAvg : 7.82, 6.54, 5.21
+  - CGroup Limits  : CPU: 4.0 Cores | Memory: 4096 MB
+  - Disk Headroom  : 32.0 GB available on /tmp/jvm-triage-18422-20261111_173000
+
+[2] Telemetry & Vital Signs (核心指标与体征)
+  - Overall CPU    : 385.0%
+  - Memory Usage   : Eden: 100.0% | Old: 99.8% | Metaspace: 88.5%
+  - GC 5s Activity : YGC: 412 | FGC Delta: +3 (FGCT Delta: +2.18s)
+  - Thread States  : Total: 280 | RUNNABLE: 120 | BLOCKED: 0 | WAITING: 80
+
+[3] Top CPU Threads & Hotspot Stack Traces (CPU 热点线程与栈顶定位)
+  [#1] TID: 18430 | nid: 0x47fe | CPU: 96.2%
+    Header: "VM Thread" os_prio=0 tid=0x00007f... nid=0x47fe runnable
+  [#2] TID: 18431 | nid: 0x47ff | CPU: 95.1%
+    Header: "GC Task Thread#0" os_prio=0 tid=0x00007f... nid=0x47ff runnable
+
+[4] Root Cause Diagnosis & Decision Matrix (根因研判与处置决策)
+  >>> Category     : GC_THRASHING_AND_MEMORY_LEAK (老年代耗尽 / 频繁 Full GC)
+  >>> Summary      : Severe GC Thrashing detected. High CPU usage is driven by JVM GC threads (Old Gen: 99.8%, FGC Count Delta: +3 in 5s).
+                     (Old区已严重耗尽，高 CPU 占用由 JVM GC 线程持续触发 Full GC 引起，属次生表象。)
+  >>> Next Actions : Potential memory leak or insufficient heap. High CPU is a SYMPTOM, not the cause. Generating a heap dump is strongly recommended for MAT analysis.
+                     (存在内存泄露或堆内存不足。高 CPU 只是表象，根因在堆内存，强烈建议保留 Heap Dump 并使用 MAT 深入分析。)
+
+[5] Safe Operation Guide (安全操作指南)
+  [+] Heap dump recommended. Disk headroom is safe (32.0 GB available).
+      (建议保留 Heap Dump，磁盘空间安全充足。)
+  [+] Recommended Non-Intrusive Dump Command:
+      jcmd 18422 GC.heap_dump /tmp/jvm-triage-18422-20261111_173000/heap_dump_18422.hprof
+      (Note: Brief STW pause may occur. If in K8s, drain/isolate pod traffic first if possible)
+      (注意: 执行 Dump 会导致短暂 STW 停顿；若在 K8s 环境，建议先将 Pod 从 Endpoint 隔离摘流)
+
+[6] Archive & Evidence Preservation (现场快照与归档)
+  Raw snapshots saved to: /tmp/jvm-triage-18422-20261111_173000
 ================================================================================
-✓ 现场已打包归档至: /tmp/jvm-triage-18422-20261111_173000.tar.gz
+
+✓ Scene preserved successfully! (现场快照已打包归档)
+Diagnostic bundle created: /tmp/jvm-triage-18422-20261111_173000.tar.gz
 ```
 
 ## 配合 AI Agent 使用
