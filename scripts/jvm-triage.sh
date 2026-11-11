@@ -60,11 +60,13 @@ fi
 # ------------------------------------------------------------------------------
 # PID Detection & Interactive Selection
 # ------------------------------------------------------------------------------
+TARGET_PID=""
+
 select_pid() {
     local requested_pid="$1"
     if [[ -n "$requested_pid" ]]; then
         if kill -0 "$requested_pid" 2>/dev/null; then
-            echo "$requested_pid"
+            TARGET_PID="$requested_pid"
             return 0
         else
             error "Specified PID $requested_pid is not running or not accessible."
@@ -103,7 +105,7 @@ select_pid() {
         exit 1
     elif [[ $count -eq 1 ]]; then
         info "Automatically selected the only running Java process: PID ${pids[0]} (${descs[0]})"
-        echo "${pids[0]}"
+        TARGET_PID="${pids[0]}"
         return 0
     fi
 
@@ -117,14 +119,20 @@ select_pid() {
     printf "%s\n" "--------------------------------------------------------------------------------"
 
     while true; do
-        read -r -p "Enter selection [1-$count] (or 'q' to quit): " choice < /dev/tty
+        local prompt="Enter selection [1-$count] (or 'q' to quit): "
+        local choice=""
+        if [[ -r /dev/tty ]]; then
+            read -r -p "$prompt" choice < /dev/tty
+        else
+            read -r -p "$prompt" choice
+        fi
+
         if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
             info "Exited by user."
             exit 0
         fi
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= count )); then
-            local selected_pid="${pids[$((choice - 1))]}"
-            echo "$selected_pid"
+            TARGET_PID="${pids[$((choice - 1))]}"
             return 0
         fi
         printf "${COLOR_RED}Invalid input. Please enter a number between 1 and %d.${COLOR_RESET}\n" "$count"
@@ -190,7 +198,7 @@ check_disk_space() {
 # ------------------------------------------------------------------------------
 # Main Triage Execution Flow
 # ------------------------------------------------------------------------------
-TARGET_PID=$(select_pid "$1")
+select_pid "$1"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 WORK_DIR="${2:-/tmp}/jvm-triage-${TARGET_PID}-${TIMESTAMP}"
 mkdir -p "$WORK_DIR"
