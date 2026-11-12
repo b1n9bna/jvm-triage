@@ -8,6 +8,25 @@
 
 在目标服务器上直接执行：
 
+### 🚀 方式一：国内服务器一键极速执行（推荐）
+
+内置 3 秒超时自动切换加速镜像，彻底解决国内节点访问 `raw.githubusercontent.com` 经常出现的连接超时与 DNS 污染：
+
+```bash
+# 自动检测 Java 进程并开始排查（自适应内外网环境）
+(curl -fsSL --connect-timeout 3 https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm-triage.sh 2>/dev/null || curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm-triage.sh) | bash
+
+# 或指定 PID
+(curl -fsSL --connect-timeout 3 https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm-triage.sh 2>/dev/null || curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm-triage.sh) | bash -s -- <PID>
+```
+
+> **直连镜像源**：也可直接使用镜像代理地址：  
+> `curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm-triage.sh | bash`
+
+---
+
+### 🌐 方式二：海外节点 / GitHub 原生直连
+
 ```bash
 # 自动检测 Java 进程并开始排查
 curl -fsSL https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm-triage.sh | bash
@@ -16,10 +35,16 @@ curl -fsSL https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm
 curl -fsSL https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm-triage.sh | bash -s -- <PID>
 ```
 
-或克隆到本地执行：
+---
+
+### 📦 方式三：克隆到本地执行
 
 ```bash
-git clone https://github.com/b1n9bna/jvm-triage.git
+# 国内加速克隆
+git clone https://ghproxy.net/https://github.com/b1n9bna/jvm-triage.git
+# 或官方源克隆
+# git clone https://github.com/b1n9bna/jvm-triage.git
+
 ./jvm-triage/scripts/jvm-triage.sh [PID]
 ```
 

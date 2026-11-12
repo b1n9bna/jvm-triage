@@ -16,6 +16,11 @@ curl -fsSL https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm
 curl -fsSL https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm-triage.sh | bash -s -- <PID>
 ```
 
+> **Tip for users in Mainland China**: If `raw.githubusercontent.com` times out or is unreachable, use the auto-fallback command:
+> ```bash
+> (curl -fsSL --connect-timeout 3 https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm-triage.sh 2>/dev/null || curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/b1n9bna/jvm-triage/main/scripts/jvm-triage.sh) | bash
+> ```
+
 Or clone locally:
 
 ```bash
